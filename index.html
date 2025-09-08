@@ -60,6 +60,7 @@
         <button id="pick" class="primary">Choisir des sons (multi)</button>
         <input id="file" type="file" accept="audio/*" multiple hidden />
         <label class="row small"><input id="shuffle" type="checkbox" /> Aléatoire</label>
+        <button id="loadDefault" class="ghost" title="Charge les sons hébergés dans assets/manifest.json">Charger les sons par défaut</button>
       </div>
     </header>
 
@@ -85,6 +86,13 @@
         <div id="name" class="filename">(nom caché)</div>
         <audio id="audio" preload="auto" controls class="panel" style="display:none"></audio>
         <div class="small" style="max-width:60ch">Objectif : écouter, pointer le ressenti (ambiance / narratif / illustration), et débattre de la perception collective.</div>
+        <div class="small" style="opacity:.8">Astuce : pour que « Charger les sons par défaut » fonctionne sur GitHub Pages, ajoute un fichier <code>assets/manifest.json</code> listant tes sons :
+          <pre class="panel" style="text-align:left;overflow:auto;white-space:pre-wrap;margin-top:8px">[
+  "assets/son1.wav",
+  "assets/son2.mp3",
+  { "src": "assets/son3.ogg", "name": "Ambiance cour d’école" }
+]</pre>
+        </div>
       </div>
     </section>
   </div>
@@ -100,6 +108,7 @@
     const revealBtn = document.getElementById('reveal');
     const nameEl = document.getElementById('name');
     const shuffleCkb = document.getElementById('shuffle');
+    const loadDefaultBtn = document.getElementById('loadDefault');
 
     let tracks = []; 
     let i = 0;
@@ -162,6 +171,44 @@
       if(e.key==='ArrowLeft') prevBtn.click();
       if(e.key.toLowerCase()==='r') revealBtn.click();
     });
+  // --- Chargement des sons par défaut (depuis assets/manifest.json) ---
+    const DEFAULT_MANIFEST_URL = new URL(location.search, location.href).searchParams.get('manifest') || 'assets/manifest.json';
+    const FALLBACK_SOUNDS = [
+      // Modifie ces chemins si tu n'utilises pas de manifest.json
+      // 'assets/s01.mp3', 'assets/s02.wav'
+    ];
+
+    async function loadDefaults(url = DEFAULT_MANIFEST_URL){
+      try{
+        let files = [];
+        const res = await fetch(url, {cache:'no-store'});
+        if(res.ok){
+          const data = await res.json();
+          if(Array.isArray(data)){
+            files = data.map(item => typeof item === 'string' ? ({ url:item, name: item.split('/').pop() })
+                                 : ({ url:item.src, name: item.name || (item.src||'').split('/').pop() }));
+          } else if (Array.isArray(data.files)){
+            files = data.files.map(item => typeof item === 'string' ? ({ url:item, name: item.split('/').pop() })
+                                   : ({ url:item.src, name: item.name || (item.src||'').split('/').pop() }));
+          }
+        }
+        if (!files.length && FALLBACK_SOUNDS.length){
+          files = FALLBACK_SOUNDS.map(p => ({ url:p, name:p.split('/').pop() }));
+        }
+        if(!files.length){
+          alert("Aucun son trouvé. Ajoute un assets/manifest.json (voir exemple) ou renseigne FALLBACK_SOUNDS dans le code.");
+          return;
+        }
+        tracks = files;
+        if (shuffleCkb.checked) tracks = shuffle(tracks);
+        i = 0; audio.style.display = 'block';
+        load(0);
+      }catch(err){
+        alert('Impossible de charger les sons par défaut : ' + err.message);
+      }
+    }
+
+    loadDefaultBtn.addEventListener('click', () => loadDefaults());
   </script>
 </body>
 </html>
