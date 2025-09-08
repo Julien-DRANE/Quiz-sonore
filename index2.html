@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quiz Sonore – Cercle des 3 types de sons</title>
+  <style>
+    :root{
+      --bg:#0b1020; --text:#f3f4f6; --muted:#9aa3b2; --ring:#1f2a44;
+      --amb:#60a5fa;  /* Bleu  */
+      --nar:#34d399;  /* Vert  */
+      --ill:#f472b6;  /* Rose  */
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 800px at 20% 0%,#141b33 0%,var(--bg) 55%);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;display:grid;place-items:center;padding:20px}
+    .app{width:100%;max-width:860px;display:grid;gap:16px}
+
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    h1{margin:0;font-size:clamp(18px,2.4vw,24px)}
+    .small{color:var(--muted);font-size:.95rem}
+
+    .panel{border:1px solid var(--ring);background:#0d1428bd;border-radius:14px;padding:14px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    button,input[type="checkbox"]{cursor:pointer}
+    button{appearance:none;border:1px solid var(--ring);background:#0e1730;color:var(--text);padding:10px 14px;border-radius:12px;font-weight:600}
+    button:active{transform:translateY(1px)}
+    .primary{background:linear-gradient(180deg,#3b82f6,#2563eb);border-color:#1d4ed8;color:#fff}
+    .ghost{background:transparent}
+
+    /* CERCLE 3 TIERS */
+    .stage{display:grid;place-items:center}
+    .circle-wrap{position:relative;width:min(84vw,520px);aspect-ratio:1;display:grid;place-items:center}
+    .circle{width:100%;height:100%;border-radius:50%;background:conic-gradient(var(--amb) 0 120deg,var(--nar) 120deg 240deg,var(--ill) 240deg 360deg);box-shadow:0 10px 30px #0007;position:relative;border:10px solid #0a1228}
+    .circle::after{content:"";position:absolute;inset:20px;border-radius:50%;border:1px dashed #1f2a44}
+
+    /* libellés */
+    .label{position:absolute;font-weight:800;text-shadow:0 2px 8px #0007;transform:translate(-50%,-50%);}
+    .chip{background:#0b1226cc;border:1px solid #1f2a44;border-radius:999px;padding:6px 10px}
+    .l-amb{top:30%;left:25%;}
+    .l-nar{top:30%;left:75%;}
+    .l-ill{top:80%;left:50%;}
+
+    /* BOUTON LECTURE au centre */
+    .play-core{position:absolute;inset:0;display:grid;place-items:center}
+    .play-btn{width:96px;height:96px;border-radius:999px;border:2px solid #e5e7eb;background:#0b1228aa;backdrop-filter:blur(6px);font-size:28px}
+
+    .under{display:grid;gap:10px;justify-items:center;text-align:center;margin-top:14px}
+    .counter{font-weight:700}
+    .filename{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--muted)}
+
+    audio{width:100%}
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="Débat sonore – 3 tiers">
+    <header>
+      <h1>🎙️ Débat sonore – 3 types de sons</h1>
+      <div class="row">
+        <button id="pick" class="primary">Choisir des sons (multi)</button>
+        <input id="file" type="file" accept="audio/*" multiple hidden />
+        <label class="row small"><input id="shuffle" type="checkbox" /> Aléatoire</label>
+      </div>
+    </header>
+
+    <section class="panel stage">
+      <div class="circle-wrap">
+        <div class="circle" aria-hidden="true"></div>
+        <div class="label l-amb"><span class="chip">Son d'ambiance</span></div>
+        <div class="label l-nar"><span class="chip">Son narratif</span></div>
+        <div class="label l-ill"><span class="chip">Son d'illustration</span></div>
+
+        <div class="play-core">
+          <button id="play" class="play-btn" title="Lecture/Pause">▶︎</button>
+        </div>
+      </div>
+
+      <div class="under">
+        <div class="counter" id="counter">0 / 0</div>
+        <div class="row">
+          <button id="prev" class="ghost">⟵ Précédent</button>
+          <button id="next" class="ghost">Suivant ⟶</button>
+          <button id="reveal" class="ghost">Révéler le nom</button>
+        </div>
+        <div id="name" class="filename">(nom caché)</div>
+        <audio id="audio" preload="auto" controls class="panel" style="display:none"></audio>
+        <div class="small" style="max-width:60ch">Objectif : écouter, pointer le ressenti (ambiance / narratif / illustration), et débattre de la perception collective.</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const fileBtn = document.getElementById('file');
+    const pickBtn = document.getElementById('pick');
+    const playBtn = document.getElementById('play');
+    const audio = document.getElementById('audio');
+    const nextBtn = document.getElementById('next');
+    const prevBtn = document.getElementById('prev');
+    const counter = document.getElementById('counter');
+    const revealBtn = document.getElementById('reveal');
+    const nameEl = document.getElementById('name');
+    const shuffleCkb = document.getElementById('shuffle');
+
+    let tracks = []; 
+    let i = 0;
+    let revealed = false;
+
+    function updateCounter(){ counter.textContent = `${tracks.length? i+1:0} / ${tracks.length}`; }
+    function setNameHidden(){ nameEl.textContent = '(nom caché)'; revealed = false; revealBtn.textContent = 'Révéler le nom'; }
+    function setNameShown(){ nameEl.textContent = tracks[i]?.name || ''; revealed = true; revealBtn.textContent = 'Cacher le nom'; }
+
+    function load(index){
+      if (!tracks.length) return;
+      i = (index + tracks.length) % tracks.length;
+      // Toujours revenir à l'état "play" visuel et logique
+      audio.pause();
+      playBtn.textContent = '▶︎';
+      audio.src = tracks[i].url;
+      audio.load();
+      setNameHidden();
+      updateCounter();
+    }
+
+    pickBtn.addEventListener('click', () => fileBtn.click());
+    fileBtn.addEventListener('change', () => {
+      const files = Array.from(fileBtn.files || []);
+      if (!files.length) return;
+      tracks = files.map(f => ({ url: URL.createObjectURL(f), name: f.name }));
+      if (shuffleCkb.checked) tracks = shuffle(tracks);
+      i = 0; audio.style.display = 'block';
+      load(0);
+    });
+
+    playBtn.addEventListener('click', async () => {
+      if (!tracks.length) { pickBtn.click(); return; }
+      if (audio.paused) {
+        try { await audio.play(); playBtn.textContent = '⏸'; } catch(e){}
+      } else { audio.pause(); playBtn.textContent = '▶︎'; }
+    });
+
+    audio.addEventListener('ended', () => { playBtn.textContent = '▶︎'; });
+    audio.addEventListener('play', () => { playBtn.textContent = '⏸'; });
+    audio.addEventListener('pause', () => { playBtn.textContent = '▶︎'; });
+
+    nextBtn.addEventListener('click', () => { if (!tracks.length) return; load(i+1); });
+    prevBtn.addEventListener('click', () => { if (!tracks.length) return; load(i-1); });
+
+    revealBtn.addEventListener('click', () => {
+      if (!tracks.length) return;
+      if (revealed) setNameHidden(); else setNameShown();
+    });
+
+    function shuffle(arr){
+      const a = arr.slice();
+      for(let k=a.length-1; k>0; k--){ const j=Math.floor(Math.random()*(k+1)); [a[k],a[j]]=[a[j],a[k]]; }
+      return a;
+    }
+
+    window.addEventListener('keydown',(e)=>{
+      if(e.code==='Space'){ e.preventDefault(); playBtn.click(); }
+      if(e.key==='ArrowRight') nextBtn.click();
+      if(e.key==='ArrowLeft') prevBtn.click();
+      if(e.key.toLowerCase()==='r') revealBtn.click();
+    });
+  </script>
+</body>
+</html>
